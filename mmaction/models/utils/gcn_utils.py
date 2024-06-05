@@ -346,8 +346,8 @@ class mstcn(BaseModule):
         self.act = nn.ReLU()
 
         if mid_channels is None:
-            mid_channels = out_channels // num_branches
-            rem_mid_channels = out_channels - mid_channels * (num_branches - 1)
+            mid_channels = max(out_channels // num_branches, 1)
+            rem_mid_channels = max(out_channels - mid_channels * (num_branches - 1), 1)
         else:
             assert isinstance(mid_channels, float) and mid_channels > 0
             mid_channels = int(out_channels * mid_channels)

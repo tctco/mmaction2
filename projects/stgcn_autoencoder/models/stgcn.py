@@ -1,13 +1,10 @@
-# Copyright (c) OpenMMLab. All rights reserved.
-import copy as cp
-from typing import Dict, List, Optional, Union
-
+from mmaction.registry import MODELS
+from mmengine.model import BaseModule, ModuleList
 import torch
 import torch.nn as nn
-from mmengine.model import BaseModule, ModuleList
-
-from mmaction.registry import MODELS
-from ..utils import Graph, mstcn, unit_gcn, unit_tcn
+from mmaction.models.utils import Graph, mstcn, unit_gcn, unit_tcn
+from typing import Dict, List, Optional, Union
+import copy as cp
 
 EPS = 1e-4
 
@@ -122,7 +119,7 @@ class STGCNBlock(BaseModule):
 
 
 @MODELS.register_module()
-class STGCN(BaseModule):
+class STGCNAnimal(BaseModule):
     """STGCN backbone.
 
     Spatial Temporal Graph Convolutional

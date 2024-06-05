@@ -4,17 +4,16 @@ from typing import Tuple
 import torch
 
 from mmaction.registry import MODELS
-from .base import BaseRecognizer
+from mmaction.models.recognizers import BaseRecognizer
 
 
 @MODELS.register_module()
-class RecognizerGCN(BaseRecognizer):
+class RecognizerGCNAnimal(BaseRecognizer):
     """GCN-based recognizer for skeleton-based action recognition."""
 
-    def extract_feat(self,
-                     inputs: torch.Tensor,
-                     stage: str = 'backbone',
-                     **kwargs) -> Tuple:
+    def extract_feat(
+        self, inputs: torch.Tensor, stage: str = "backbone", **kwargs
+    ) -> Tuple:
         """Extract features at the given stage.
 
         Args:
@@ -32,14 +31,14 @@ class RecognizerGCN(BaseRecognizer):
         # Record the kwargs required by `loss` and `predict`
 
         bs, nc = inputs.shape[:2]
-        inputs = inputs.reshape((bs * nc, ) + inputs.shape[2:])
+        inputs = inputs.reshape((bs * nc,) + inputs.shape[2:])
         loss_predict_kwargs = dict(inputs=inputs)
 
         x = self.backbone(inputs)
 
-        if stage == 'backbone':
+        if stage == "backbone":
             return x, loss_predict_kwargs
 
-        if self.with_cls_head and stage == 'head':
+        if self.with_cls_head and stage == "head":
             x = self.cls_head(x, **loss_predict_kwargs)
             return x, loss_predict_kwargs

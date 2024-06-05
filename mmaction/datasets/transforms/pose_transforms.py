@@ -773,7 +773,7 @@ class JointToBone(BaseTransform):
                  target: str = 'keypoint') -> None:
         self.dataset = dataset
         self.target = target
-        if self.dataset not in ['nturgb+d', 'openpose', 'coco']:
+        if self.dataset not in ['nturgb+d', 'openpose', 'coco', 'mouse']:
             raise ValueError(
                 f'The dataset type {self.dataset} is not supported')
         if self.dataset == 'nturgb+d':
@@ -791,6 +791,18 @@ class JointToBone(BaseTransform):
             self.pairs = ((0, 0), (1, 0), (2, 0), (3, 1), (4, 2), (5, 0),
                           (6, 0), (7, 5), (8, 6), (9, 7), (10, 8), (11, 0),
                           (12, 0), (13, 11), (14, 12), (15, 13), (16, 14))
+        
+        elif self.dataset == 'mouse':
+            self.pairs = (
+                (0, 0),
+                (1, 0),
+                (2, 0),
+                (3, 5),
+                (4, 5),
+                (5, 0),
+                (6, 5),
+                (7, 6),
+            )
 
     def transform(self, results: Dict) -> Dict:
         """The transform function of :class:`JointToBone`.
@@ -820,6 +832,62 @@ class JointToBone(BaseTransform):
                     f'dataset={self.dataset}, '
                     f'target={self.target})')
         return repr_str
+
+
+@TRANSFORMS.register_module()
+class RandomRotation(BaseTransform):
+    def __init__(self, range) -> None:
+        self.range = range / 180 * np.pi
+        super().__init__()
+
+    def transform(self, results: Dict) -> Dict:
+        rotmat = self.rotation_matrix_2d(np.random.uniform(-self.range, self.range))
+        results["keypoint"] = np.einsum("abcd,kd->abck", results["keypoint"], rotmat)
+        return results
+
+    def rotation_matrix_2d(self, theta):
+        return np.array(
+            [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
+        )
+
+
+@TRANSFORMS.register_module()
+class RandomZoom(BaseTransform):
+    def __init__(self, range) -> None:
+        self.range = range
+        super().__init__()
+
+    def transform(self, results: Dict) -> Dict:
+        zoom = np.random.uniform(1 - self.range, 1 + self.range)
+        results["keypoint"][..., :2] = results["keypoint"][..., :2] * zoom
+        return results
+
+
+@TRANSFORMS.register_module()
+class RandomSwapIndividuals(BaseTransform):
+    def __init__(self, reorder=False) -> None:
+        super().__init__()
+        self.reorder = reorder
+
+    def transform(self, results: Dict) -> Dict:
+        n_inst, t, n_kpt, channel = results["keypoint"].shape
+        perm = np.random.permutation(n_inst)
+        results["keypoint"] = results["keypoint"][perm, ...]
+        if "keypoint_score" in results:
+            results["keypoint_score"] = results["keypoint_score"][perm, ...]
+        results["comb"] = np.array(results["comb"])[perm]
+        if "target" in results:
+            results["target"] = np.where(results["target"] == perm)[0].item()
+        if self.reorder:
+            results["keypoint"][[0, results["target"]]] = results["keypoint"][
+                [results["target"], 0]
+            ]
+            results["target"] = 0
+            if "keypoint_score" in results:
+                results["keypoint_score"][[0, results["target"]]] = results[
+                    "keypoint_score"
+                ][[results["target"], 0]]
+        return results
 
 
 @TRANSFORMS.register_module()

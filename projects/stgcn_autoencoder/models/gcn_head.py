@@ -1,83 +1,6 @@
-# Copyright (c) OpenMMLab. All rights reserved.
-from typing import Dict, List, Union
-
-import torch
-import torch.nn as nn
-
 from mmaction.registry import MODELS
-from .base import BaseHead
+from mmaction.models.heads import BaseHead
 from mmengine.structures import LabelData
-import torch.nn.functional as F
-
-
-@MODELS.register_module()
-class GCNHead(BaseHead):
-    """The classification head for GCN.
-
-    Args:
-        num_classes (int): Number of classes to be classified.
-        in_channels (int): Number of channels in input feature.
-        loss_cls (dict): Config for building loss.
-            Defaults to ``dict(type='CrossEntropyLoss')``.
-        dropout (float): Probability of dropout layer. Defaults to 0.
-        init_cfg (dict or list[dict]): Config to control the initialization.
-            Defaults to ``dict(type='Normal', layer='Linear', std=0.01)``.
-    """
-
-    def __init__(
-        self,
-        num_classes: int,
-        in_channels: int,
-        loss_cls: Dict = dict(type="CrossEntropyLoss"),
-        dropout: float = 0.0,
-        average_clips: str = "prob",
-        init_cfg: Union[Dict, List[Dict]] = dict(
-            type="Normal", layer="Linear", std=0.01
-        ),
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            num_classes,
-            in_channels,
-            loss_cls=loss_cls,
-            average_clips=average_clips,
-            init_cfg=init_cfg,
-            **kwargs,
-        )
-        self.dropout_ratio = dropout
-        if self.dropout_ratio != 0:
-            self.dropout = nn.Dropout(p=self.dropout_ratio)
-        else:
-            self.dropout = None
-
-        self.pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Linear(self.in_channels, self.num_classes)
-
-    def forward(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        """Forward features from the upstream network.
-
-        Args:
-            x (torch.Tensor): Features from the upstream network.
-
-        Returns:
-            torch.Tensor: Classification scores with shape (B, num_classes).
-        """
-
-        N, M, C, T, V = x.shape
-        x = x.view(N * M, C, T, V)
-        x = self.pool(x)
-        x = x.view(N, M, C)
-        x = x.mean(dim=1)
-        assert x.shape[1] == self.in_channels
-
-        if self.dropout is not None:
-            x = self.dropout(x)
-
-        cls_scores = self.fc(x)
-        return cls_scores
-
-
-# Copyright (c) OpenMMLab. All rights reserved.
 import copy as cp
 from typing import Dict, List, Optional, Union
 
@@ -87,64 +10,11 @@ from mmengine.model import BaseModule, ModuleList
 from torch.nn import Sequential
 
 from mmaction.registry import MODELS
-from ..utils import Graph, unit_gcn
+from mmaction.models.utils import Graph, unit_gcn
 from mmcv.cnn import build_norm_layer
+import torch.nn.functional as F
 
 EPS = 1e-4
-
-
-class unit_social(BaseModule):
-    def __init__(self, num_persons, channel, activation="relu"):
-        num_kpts = 8
-        self.residual = True
-        super().__init__(
-            init_cfg=[dict(type="Kaiming", layer="Conv2d", mode="fan_out")]
-        )
-        self.m = num_persons
-        if activation == "silu":
-            self.act = nn.SiLU()
-        elif activation == "tanh":
-            self.act = nn.Tanh()
-        elif activation == "relu":
-            self.act = nn.ReLU()
-        else:
-            self.act = nn.ReLU()
-        self.conv = [
-            nn.Conv1d(self.m * channel, self.m * channel, kernel_size=1)
-            for _ in range(num_kpts)
-        ]
-        self.bn = [nn.BatchNorm1d(self.m * channel) for _ in range(num_kpts)]
-        self.conv = nn.ModuleList(self.conv)
-        self.bn = nn.ModuleList(self.bn)
-        # self.conv = nn.Conv1d(self.m * channel, self.m * channel, kernel_size=1)
-
-    def forward(self, x):
-        n, c, t, v = x.size()
-        n = n // self.m
-        x = (
-            x.view(n, self.m, c, t, v).permute(0, 1, 2, 4, 3).contiguous()
-        )  # n, m, c, v, t
-        x = x.view(n, self.m * c, v, t)
-        res = []
-        for i in range(v):
-            if self.residual:
-                res.append(
-                    self.act(self.bn[i](self.conv[i](x[:, :, i, :])) + x[:, :, i, :])
-                )
-            else:
-                res.append(self.act(self.bn[i](self.conv[i](x[:, :, i, :]))))
-        res = torch.stack(res, dim=2)
-        # if self.residual:
-        #     x = x + res
-        # x = x.view(n, self.m*v, t*c)
-        # x = self.act(self.conv(x))
-        x = (
-            x.view(n, self.m, c, v, t)
-            .permute(0, 1, 2, 4, 3)
-            .contiguous()
-            .view(n * self.m, c, t, v)
-        )
-        return x
 
 
 class unit_tcn_decoder(BaseModule):
@@ -412,7 +282,7 @@ class STGCNDecodeBlock(BaseModule):
 
 
 @MODELS.register_module()
-class GCNHeadDecoder(BaseHead):
+class GCNHeadDecoderAnimal(BaseHead):
     """STGCN backbone.
 
     Spatial Temporal Graph Convolutional
@@ -700,7 +570,6 @@ class GCNHeadDecoder(BaseHead):
         ), f"inputs shape {inputs.shape} != restored shape {restored.shape}"
         losses = dict()
         loss = self.loss_restore(restored, inputs)
-        # loss = torch.tensor(0, dtype=torch.float32, device=restored.device)
         if isinstance(loss, dict):
             losses.update(loss)
         else:
